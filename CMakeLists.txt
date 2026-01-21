@@ -7,40 +7,23 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_compile_options(-w -Wall -Wextra -Wpedantic)
 
+# Set a default install prefix if the user didn't specify one
+set(CMAKE_INSTALL_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/install" CACHE PATH "Install path prefix" FORCE)
+
+list(INSERT CMAKE_PREFIX_PATH 0 "/opt/openrobots")
+
 set(pinocchio_DIR "/opt/openrobots/lib/cmake/pinocchio")
-# set(pinocchio_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pinocchio/install/lib")
-# set(pinocchio_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pinocchio/install/include")
-# set(PINOCCHIO_URDF_LIB "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pinocchio/install/lib/libpinocchio_parsers.so")
-# set(casadi_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/cmake")
-# set(casadi_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/")
-# set(casadi_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/include")
-# set(hpp-fcl_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/coal/install/lib/cmake/hpp-fcl")
-# set(coal_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/coal/install/lib/cmake/coal")
 
 find_package(pinocchio REQUIRED)
 
-set(USE_CASADI OFF CACHE BOOL "Use CasADi for optimization")
-
+set(USE_CASADI ON CACHE BOOL "Use CasADi for optimization")
 if(USE_CASADI)
-    set(casadi_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/cmake")
-    set(casadi_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/")
-    set(casadi_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/include")
-    set(hpp-fcl_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/coal/install/lib/cmake/hpp-fcl")
-    set(coal_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/coal/install/lib/cmake/coal")
-    set(hpp-fcl_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/coal/install/lib/cmake/hpp-fcl")
-    
     find_package(casadi REQUIRED)
 endif()
-find_library(PINOCCHIO_URDF_LIB 
-    NAMES pinocchio_urdf 
-    PATHS "${pinocchio_LIB_DIR}" 
-    NO_DEFAULT_PATH
-)
 
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third_party/eigen/eigen")
 
 file(GLOB_RECURSE SOURCES "src/*.cpp")
-
 add_library(g1_ik ${SOURCES})
 
 target_include_directories(g1_ik PUBLIC 
@@ -75,6 +58,10 @@ if(USE_CASADI)
     )
 endif()
 
+if(USE_CASADI)
+    target_compile_definitions(g1_ik PRIVATE USE_CASADI)
+endif()
+
 option(BUILD_TESTING "Build tests" ON)
 if(BUILD_TESTING)
     find_package(GTest REQUIRED)
@@ -84,10 +71,15 @@ if(BUILD_TESTING)
     target_link_libraries(test_ik PRIVATE g1_ik GTest::gtest_main)
     target_link_libraries(test_robot_arm_ik PRIVATE g1_ik GTest::gtest_main)
 
+    if(USE_CASADI)
+        target_compile_definitions(test_robot_arm_ik PRIVATE USE_CASADI)
+        target_compile_definitions(test_ik PRIVATE USE_CASADI)
+    endif()
+
     # Allows running 'ctest' from the build directory
     include(GoogleTest)
     gtest_discover_tests(test_robot_arm_ik)
-    # gtest_discover_tests(test_ik)
+    gtest_discover_tests(test_ik)
 
 endif()
 

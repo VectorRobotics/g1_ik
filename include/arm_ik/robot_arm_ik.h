@@ -3,9 +3,9 @@
 
 #ifdef USE_CASADI
     #include "casadi_eigen_utils.h"
-#else
-    #include "pinocchio_eigen_utils.h"
 #endif // USE_CASADI
+
+#include "pinocchio_eigen_utils.h"
 
 #include <Eigen/Dense>
 #include <vector>

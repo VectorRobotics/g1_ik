@@ -181,6 +181,8 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK::solve_ik(
         opti_.set_value(param_tf_l_, eigen_to_casadi(left_wrist));
         opti_.set_value(param_tf_r_, eigen_to_casadi(right_wrist));
         opti_.set_value(var_q_last_, eigen_to_casadi(init_data_));
+
+        std::cout << "[G1_29_ArmIK] >>> Solving IK with CasADi..." << std::endl;
     
     #else // USE_CASADI
 
@@ -206,12 +208,12 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK::solve_ik(
     try {
 
         #ifdef USE_CASADI
+            std::cout << "[G1_29_ArmIK] >>> Starting optimization..." << std::endl;
             // Solve optimization problem
             casadi::OptiSol sol = opti_.solve();
             
             // Extract solution
             std::vector<double> sol_q_vec = static_cast<std::vector<double>>(sol.value(var_q_));
-            std::vector<double> sol_q_vec = static_cast<std::vector<double>>(var_q_);
         #else // USE_CASADI
             // Using interation method
             for (int i=0;;i++)

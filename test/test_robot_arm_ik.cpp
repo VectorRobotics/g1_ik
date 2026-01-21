@@ -2,6 +2,12 @@
 
 int main(){
 
+    #ifdef USE_CASADI
+    std::cout << "Using CasADi for optimization." << std::endl;
+    #else
+    std::cout << "Not using CasADi for optimization." << std::endl;
+    #endif
+
     try{
         auto ik_solver = G1_29_ArmIK();
     }
