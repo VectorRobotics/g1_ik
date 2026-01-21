@@ -1,3 +1,24 @@
+# Installation
+
+## Building from source
+Follow these instructions.
+1. Clone the source code
+
+   ```bash
+   git clone https://github.com/VectorRobotics/g1_ik.git
+   ```
+2. Make build and install directories
+   ```bash
+   cd g1_ik && mkdir build install && cd build
+   ```
+3. Configure, make and install
+   ```bash
+   cmake ..
+   make -j4
+   make install
+   ```
+
+
 
 # How to use
 
