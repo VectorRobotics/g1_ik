@@ -1,7 +1,4 @@
 
-
-Installation of pinocchio and casadi libraries required.
-
 # How to use
 
 To use IK, do the following in the package
@@ -29,24 +26,6 @@ auto [q, tau] = arm_ik.solve_ik(
     true  // enable collision checking
 );
 ```
-
-### Required Libraries
-
-1. **Eigen3** (≥ 3.3) (Already installed with ROS2)
-   ```bash
-   sudo apt-get install libeigen3-dev
-   ```
-
-2. **Pinocchio** (≥ 2.6)
-   ```bash
-   sudo apt install ros-$ROS_DISTRO-pinocchio
-   ```
-
-3. **CasADi** (≥ 3.5)
-   ```bash
-   # Download from https://web.casadi.org/get/
-   # Or install via package manager if available
-   ```
 
 ## Some helper functions
 ```cpp
