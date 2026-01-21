@@ -7,43 +7,31 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_compile_options(-w -Wall -Wextra -Wpedantic)
 
-# Set a default install prefix if the user didn't specify one
 set(CMAKE_INSTALL_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/install" CACHE PATH "Install path prefix" FORCE)
+set(USE_CASADI ON CACHE BOOL "Use CasADi for optimization")
+option(BUILD_TESTING "Build tests" OFF)
+option(INSTALL_TESTING "Install test sources alongside the project" OFF)
 
-list(INSERT CMAKE_PREFIX_PATH 0 "/opt/openrobots")
 
-set(pinocchio_DIR "/opt/openrobots/lib/cmake/pinocchio")
+# ---- Dependencies ---- #
+
+list(INSERT CMAKE_PREFIX_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
 find_package(pinocchio REQUIRED)
 
-set(USE_CASADI ON CACHE BOOL "Use CasADi for optimization")
 if(USE_CASADI)
     find_package(casadi REQUIRED)
 endif()
 
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third_party/eigen/eigen")
 
+# ---- Library ---- #
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 add_library(g1_ik ${SOURCES})
 
 target_include_directories(g1_ik PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
-    if(USE_CASADI)
-        ${hpp-fcl_INCLUDE_DIRS}
-        ${coal_INCLUDE_DIRS}
-        ${casadi_INCLUDE_DIR}
-    endif()
-    ${pinocchio_INCLUDE_DIR}
-)
-
-target_link_directories(g1_ik PUBLIC 
-    if(USE_CASADI)
-        ${hpp-fcl_LIBRARY_DIRS}
-        ${coal_LIBRARY_DIRS}
-        ${casadi_LIB_DIR} 
-    endif()
-    ${pinocchio_LIB_DIR}
 )
 
 target_link_libraries(g1_ik
@@ -51,18 +39,17 @@ target_link_libraries(g1_ik
       Eigen3::Eigen
       pinocchio::pinocchio
 )
+
 if(USE_CASADI)
     target_link_libraries(g1_ik
     PUBLIC
         casadi
     )
-endif()
-
-if(USE_CASADI)
     target_compile_definitions(g1_ik PRIVATE USE_CASADI)
 endif()
 
-option(BUILD_TESTING "Build tests" ON)
+# ---- Tests ---- #
+
 if(BUILD_TESTING)
     find_package(GTest REQUIRED)
     
@@ -83,7 +70,8 @@ if(BUILD_TESTING)
 
 endif()
 
-# --- Installation ---
+# --- Installation --- #
+
 include(GNUInstallDirs)
 
 # Install the library
@@ -97,4 +85,7 @@ install(TARGETS g1_ik
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # Install the test source (as requested)
-install(FILES test/test_ik.cpp DESTINATION share/${PROJECT_NAME}/test)
+if(INSTALL_TESTING)
+    install(FILES test/test_ik.cpp DESTINATION share/${PROJECT_NAME}/test)
+    install(FILES test/test_robot_arm_ik.cpp DESTINATION share/${PROJECT_NAME}/test)
+endif()
