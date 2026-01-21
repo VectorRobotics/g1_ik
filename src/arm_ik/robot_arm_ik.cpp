@@ -1,6 +1,5 @@
-#include "include/robot_arm_ik.h"
-#include "include/casadi_eigen_utils.h"
-#include <iostream>
+#include "arm_ik/robot_arm_ik.h"
+
 #include <stdexcept>
 #include <cmath>
 
@@ -14,7 +13,7 @@ G1_29_ArmIK::G1_29_ArmIK(bool unit_test, bool visualization)
     
     std::cout << std::fixed << std::setprecision(5);
     
-    urdf_path_ = "../assets/g1/g1_body29_hand14.urdf";
+    urdf_path_ = "../assets/g1/g1_29dof_with_hand_rev_1_0.urdf";
     
     // Initialize joints to lock
     initialize_joints_to_lock();
@@ -40,6 +39,10 @@ G1_29_ArmIK::G1_29_ArmIK(bool unit_test, bool visualization)
     
     // Add end-effector frames
     add_end_effector_frames();
+
+    // Extracting camera frames
+    oMcamera = reduced_model_.getFrameId("d435_link", pinocchio::BODY);
+    oMLidar = reduced_model_.getFrameId("mid360_link", pinocchio::BODY);
     
     // Setup CasADi optimization
     setup_optimization();
@@ -90,15 +93,15 @@ void G1_29_ArmIK::initialize_joints_to_lock() {
 
 void G1_29_ArmIK::add_end_effector_frames() {
     // Add left end-effector frame
-    pinocchio::JointIndex left_wrist_id = reduced_model_.getJointId("left_wrist_yaw_joint");
+    left_wrist_id_ = reduced_model_.getJointId("left_wrist_yaw_joint");
     pinocchio::SE3 left_placement(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.05, 0, 0));
-    reduced_model_.addFrame(pinocchio::Frame("L_ee", left_wrist_id, left_placement, 
+    reduced_model_.addFrame(pinocchio::Frame("L_ee", left_wrist_id_, left_placement, 
                                             pinocchio::OP_FRAME));
     
     // Add right end-effector frame
-    pinocchio::JointIndex right_wrist_id = reduced_model_.getJointId("right_wrist_yaw_joint");
+    right_wrist_id_ = reduced_model_.getJointId("right_wrist_yaw_joint");
     pinocchio::SE3 right_placement(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.05, 0, 0));
-    reduced_model_.addFrame(pinocchio::Frame("R_ee", right_wrist_id, right_placement, 
+    reduced_model_.addFrame(pinocchio::Frame("R_ee", right_wrist_id_, right_placement, 
                                              pinocchio::OP_FRAME));
 
     // Get frame IDs for end effectors
@@ -107,6 +110,7 @@ void G1_29_ArmIK::add_end_effector_frames() {
 }
 
 void G1_29_ArmIK::setup_optimization() {
+    #ifdef USE_CASADI
     // Create optimization variables and parameters
     var_q_ = opti_.variable(reduced_model_.nq, 1);
     var_q_last_ = opti_.parameter(reduced_model_.nq, 1);
@@ -139,6 +143,7 @@ void G1_29_ArmIK::setup_optimization() {
     opts["ipopt.jacobian_approximation"] = "exact";
     
     opti_.solver("ipopt", opts);
+    #endif // USE_CASADI
 }
 
 std::pair<Eigen::Matrix4d, Eigen::Matrix4d> G1_29_ArmIK::scale_arms(
@@ -167,19 +172,79 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK::solve_ik(
     if (current_lr_arm_motor_q != nullptr) {
         init_data_ = *current_lr_arm_motor_q;
     }
-    
-    // Set optimization initial guess and parameters
-    opti_.set_initial(var_q_, eigen_to_casadi(init_data_));
-    opti_.set_value(param_tf_l_, eigen_to_casadi(left_wrist));
-    opti_.set_value(param_tf_r_, eigen_to_casadi(right_wrist));
-    opti_.set_value(var_q_last_, eigen_to_casadi(init_data_));
-    
-    try {
-        // Solve optimization problem
-        casadi::OptiSol sol = opti_.solve();
+
+    // #TODO: Get current camera/lidar frame to get reference for desired transforms
+    #ifdef USE_CASADI
         
-        // Extract solution
-        std::vector<double> sol_q_vec = static_cast<std::vector<double>>(sol.value(var_q_));
+        // Set optimization initial guess and parameters
+        opti_.set_initial(var_q_, eigen_to_casadi(init_data_));
+        opti_.set_value(param_tf_l_, eigen_to_casadi(left_wrist));
+        opti_.set_value(param_tf_r_, eigen_to_casadi(right_wrist));
+        opti_.set_value(var_q_last_, eigen_to_casadi(init_data_));
+    
+    #else // USE_CASADI
+
+        var_q_ = init_data_;
+        param_tf_l_ = eigen_to_pinocchio(left_wrist);
+        param_tf_r_ = eigen_to_pinocchio(right_wrist);
+        var_q_last_ = init_data_;
+
+
+        Eigen::VectorXd v_itr(reduced_model_.nv);
+        pinocchio::Data::Matrix6x J_left(6,reduced_model_.nv);
+        pinocchio::Data::Matrix6x J_right(6,reduced_model_.nv);
+        pinocchio::Data::MatrixXs J(12,reduced_model_.nv);
+        J_left.setZero();
+        J_right.setZero();
+
+        // Frames for camera and lidar
+        // reduced_data_.oMf[oMcamera];
+        // reduced_data_.oMf[oMLidar];
+
+    #endif // USE_CASADI
+
+    try {
+
+        #ifdef USE_CASADI
+            // Solve optimization problem
+            casadi::OptiSol sol = opti_.solve();
+            
+            // Extract solution
+            std::vector<double> sol_q_vec = static_cast<std::vector<double>>(sol.value(var_q_));
+            std::vector<double> sol_q_vec = static_cast<std::vector<double>>(var_q_);
+        #else // USE_CASADI
+            // Using interation method
+            for (int i=0;;i++)
+            {
+                pinocchio::forwardKinematics(reduced_model_,reduced_data_,var_q_);
+                const pinocchio::SE3 left_dMi = param_tf_l_.actInv(reduced_data_.oMi[left_wrist_id_]);
+                const pinocchio::SE3 right_dMi = param_tf_r_.actInv(reduced_data_.oMi[right_wrist_id_]);
+                err.head<6>() = pinocchio::log6(left_dMi).toVector();
+                err.tail<6>() = pinocchio::log6(right_dMi).toVector();
+
+                if(err.norm() < eps) {
+                    break;
+                }
+                if (i >= IT_MAX) {
+                    throw std::runtime_error("Maximum iterations reached without convergence.");
+                }
+                pinocchio::computeJointJacobian(reduced_model_,reduced_data_,var_q_,left_wrist_id_,J_left);
+                pinocchio::computeJointJacobian(reduced_model_,reduced_data_,var_q_,right_wrist_id_,J_right);
+                J.topRows<6>() = J_left;
+                J.bottomRows<6>() = J_right;
+                pinocchio::Data::MatrixXs JJt;
+                JJt.noalias() = J * J.transpose();
+                JJt.diagonal().array() += damp;
+                v_itr.noalias() = - J.transpose() * JJt.ldlt().solve(err);
+                var_q_ = pinocchio::integrate(reduced_model_,var_q_,v_itr * DT);
+            }
+
+            var_q_last_ = var_q_;
+
+            // Extract solution
+            std::vector<double> sol_q_vec(var_q_.data(), var_q_.data() + var_q_.size());
+        #endif // USE_CASADI
+
         Eigen::VectorXd sol_q = Eigen::Map<Eigen::VectorXd>(sol_q_vec.data(), reduced_model_.nq);
         
         // Apply smoothing filter
@@ -207,9 +272,15 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK::solve_ik(
     } catch (const std::exception& e) {
         std::cerr << "ERROR in convergence: " << e.what() << std::endl;
         
+        #ifdef USE_CASADI
         // Get debug solution
         std::vector<double> sol_q_vec = static_cast<std::vector<double>>(
             opti_.debug().value(var_q_));
+        #else // USE_CASADI
+        // Get debug solution
+        std::vector<double> sol_q_vec(var_q_.data(), var_q_.data() + var_q_.size());
+        #endif // USE_CASADI
+
         Eigen::VectorXd sol_q = Eigen::Map<Eigen::VectorXd>(
             sol_q_vec.data(), reduced_model_.nq);
         

@@ -1,162 +1,108 @@
 cmake_minimum_required(VERSION 3.8)
-project(unitree_interface)
+project(g1_ik)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-# set(CMAKE_BUILD_TYPE Release)
 
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
+add_compile_options(-w -Wall -Wextra -Wpedantic)
 
-find_package(ament_cmake REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(rosidl_default_generators REQUIRED)
+set(pinocchio_DIR "/opt/openrobots/lib/cmake/pinocchio")
+# set(pinocchio_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pinocchio/install/lib")
+# set(pinocchio_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pinocchio/install/include")
+# set(PINOCCHIO_URDF_LIB "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pinocchio/install/lib/libpinocchio_parsers.so")
+# set(casadi_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/cmake")
+# set(casadi_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/")
+# set(casadi_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/include")
+# set(hpp-fcl_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/coal/install/lib/cmake/hpp-fcl")
+# set(coal_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/coal/install/lib/cmake/coal")
 
-############ IK ############
-find_package(Eigen3 REQUIRED)
 find_package(pinocchio REQUIRED)
 
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
-set(CASADI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi")
-set(CASADI_INCLUDE_DIRS "${CASADI_DIR}/include")
+set(USE_CASADI OFF CACHE BOOL "Use CasADi for optimization")
 
-include_directories(
-    ${EIGEN3_INCLUDE_DIR}
-    ${pinocchio_INCLUDE_DIRS}
-    ${CASADI_INCLUDE_DIRS}
+if(USE_CASADI)
+    set(casadi_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/cmake")
+    set(casadi_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/")
+    set(casadi_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/casadi/include")
+    set(hpp-fcl_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/coal/install/lib/cmake/hpp-fcl")
+    set(coal_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/coal/install/lib/cmake/coal")
+    set(hpp-fcl_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/coal/install/lib/cmake/hpp-fcl")
+    
+    find_package(casadi REQUIRED)
+endif()
+find_library(PINOCCHIO_URDF_LIB 
+    NAMES pinocchio_urdf 
+    PATHS "${pinocchio_LIB_DIR}" 
+    NO_DEFAULT_PATH
 )
 
-link_directories(${CASADI_DIR})
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third_party/eigen/eigen")
 
-# Source files
-set(IK_SOURCES
-    src/arm_ik/weighted_moving_filter.cpp
-    src/arm_ik/robot_arm_ik.cpp
-    src/arm_ik/robot_arm_ik_g1_23dof.cpp
-)
+file(GLOB_RECURSE SOURCES "src/*.cpp")
 
-# Headers
-set(IK_HEADERS
-    src/arm_ik/include/weighted_moving_filter.h
-    src/arm_ik/include/robot_arm_ik.h
-    src/arm_ik/include/robot_arm_ik_g1_23dof.h
-)
-########################
+add_library(g1_ik ${SOURCES})
 
-# unitree_sdk2
-add_subdirectory(third_party/unitree_sdk2)
-
-# Generate service definitions
-# set(msg_files
-#   ""
-# )
-
-set(srv_files
-  "interfaces/srv/ChangeControlMode.srv"
-)
-
-rosidl_generate_interfaces(unitree_interface
-  ${srv_files}
-  DEPENDENCIES
-    builtin_interfaces
-)
-
-ament_export_dependencies(rosidl_default_runtime)
-
-rosidl_get_typesupport_target(typesupport_target
-  unitree_interface rosidl_typesupport_cpp)
-
-# Create the library
-add_library(unitree_interface_lib
-  SHARED
-    src/unitree_interface.cpp
-    src/control_modes.cpp
-    src/unitree_sdk_wrapper.cpp
-    src/mode_transitions.cpp
-    ${IK_SOURCES}
-    ${IK_HEADERS}
-)
-
-target_include_directories(unitree_interface_lib
-  PUBLIC
+target_include_directories(g1_ik PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
-    ${CASADI_INCLUDE_DIRS}
+    if(USE_CASADI)
+        ${hpp-fcl_INCLUDE_DIRS}
+        ${coal_INCLUDE_DIRS}
+        ${casadi_INCLUDE_DIR}
+    endif()
+    ${pinocchio_INCLUDE_DIR}
 )
 
-# Not decreasing compile time for some reason
-# target_precompile_headers(unitree_interface_lib
-#   PRIVATE
-#     include/unitree_interface/pch.hpp
-# )
-
-target_link_libraries(unitree_interface_lib
-  "${typesupport_target}"
-  unitree_sdk2
-  ${EIGEN3_LIBRARIES}
-  pinocchio::pinocchio
-  casadi
+target_link_directories(g1_ik PUBLIC 
+    if(USE_CASADI)
+        ${hpp-fcl_LIBRARY_DIRS}
+        ${coal_LIBRARY_DIRS}
+        ${casadi_LIB_DIR} 
+    endif()
+    ${pinocchio_LIB_DIR}
 )
 
-ament_target_dependencies(unitree_interface_lib
-  rclcpp
-  geometry_msgs
+target_link_libraries(g1_ik
+    PUBLIC
+      Eigen3::Eigen
+      pinocchio::pinocchio
 )
-
-# Create the executable
-add_executable(unitree_interface_node
-  src/unitree_interface_node.cpp
-)
-
-target_link_libraries(unitree_interface_node
-  unitree_interface_lib
-)
-
-# set_target_properties(unitree_interface_node PROPERTIES 
-#     INSTALL_RPATH "$ORIGIN/../lib"
-# )
-
-install(TARGETS unitree_interface_node
-  DESTINATION lib/unitree_interface
-)
-
-# install(FILES ${CASADI_LIBS}
-#   DESTINATION lib/${PROJECT_NAME})
-
-install(DIRECTORY launch
-  DESTINATION share/unitree_interface
-)
-
-if(BUILD_TESTING)
-  find_package(ament_cmake_gtest REQUIRED)
-
-  # Test control_modes
-  ament_add_gtest(test_control_modes
-    test/test_control_modes.cpp
-  )
-
-  target_link_libraries(test_control_modes
-    unitree_interface_lib
-  )
-
-  # Test unitree_interface
-  ament_add_gtest(test_unitree_interface
-    test/test_unitree_interface.cpp
-  )
-
-  target_link_libraries(test_unitree_interface
-    unitree_interface_lib
-  )
-
-  ament_add_gtest(test_ik
-    test/test_ik.cpp
-  )
-
-  target_link_libraries(test_ik
-    unitree_interface_lib
-  )
+if(USE_CASADI)
+    target_link_libraries(g1_ik
+    PUBLIC
+        casadi
+    )
 endif()
 
-ament_package()
+option(BUILD_TESTING "Build tests" ON)
+if(BUILD_TESTING)
+    find_package(GTest REQUIRED)
+    
+    add_executable(test_ik test/test_ik.cpp)
+    add_executable(test_robot_arm_ik test/test_robot_arm_ik.cpp)
+    target_link_libraries(test_ik PRIVATE g1_ik GTest::gtest_main)
+    target_link_libraries(test_robot_arm_ik PRIVATE g1_ik GTest::gtest_main)
+
+    # Allows running 'ctest' from the build directory
+    include(GoogleTest)
+    gtest_discover_tests(test_robot_arm_ik)
+    # gtest_discover_tests(test_ik)
+
+endif()
+
+# --- Installation ---
+include(GNUInstallDirs)
+
+# Install the library
+install(TARGETS g1_ik
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Install the headers
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+# Install the test source (as requested)
+install(FILES test/test_ik.cpp DESTINATION share/${PROJECT_NAME}/test)
