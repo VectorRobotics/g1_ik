@@ -32,7 +32,8 @@ class G1_29_ArmIK {
 public:
     G1_29_ArmIK(
         bool unit_test = false, 
-        bool visualization = false
+        bool visualization = false,
+        const RobotConfig* robot_config = nullptr
     );
     virtual ~G1_29_ArmIK();
 

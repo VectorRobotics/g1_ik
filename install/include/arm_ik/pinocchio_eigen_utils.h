@@ -1,8 +1,6 @@
 #ifndef PINOCCHIO_EIGEN_UTILS_H
 #define PINOCCHIO_EIGEN_UTILS_H
 
-#ifndef USE_CASADI
-
 #include <pinocchio/multibody/model.hpp>
 #include <pinocchio/multibody/data.hpp>
 #include <pinocchio/parsers/urdf.hpp>
@@ -69,5 +67,4 @@ inline pinocchio::SE3 eigen_to_pinocchio(const Eigen::Matrix4d& mat) {
 //     return mat;
 // }
 
-#endif // USE_CASADI
 #endif // PINOCCHIO_EIGEN_UTILS_H

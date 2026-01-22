@@ -37,10 +37,21 @@ int main() {
     ext_force_left(2) = 5.0;  // 5N downward force
 
     // Solve IK with collision checking
-    auto [q, tau] = arm_ik.solve_ik(
+    // time the IK solve
+    #include <chrono>
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = arm_ik.solve_ik(
         left_target, right_target,
         nullptr, nullptr,  // current q, dq
         &ext_force_left, &ext_force_right,
         true  // enable collision checking
     );
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end - start;
+    auto [q, tau] = result;
+    std::cout << "IK solve time: " << elapsed.count() << " s" << std::endl;
+
+    std::cout << "IK solution q: " << q.transpose() << std::endl;
+    std::cout << "IK solution tau: " << tau.transpose() << std::endl;
+
 }

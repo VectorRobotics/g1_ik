@@ -4,14 +4,23 @@ project(g1_ik)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+include(CMakeDependentOption)
 
 add_compile_options(-w -Wall -Wextra -Wpedantic)
 
 set(CMAKE_INSTALL_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/install" CACHE PATH "Install path prefix" FORCE)
-set(USE_CASADI ON CACHE BOOL "Use CasADi for optimization")
-option(BUILD_TESTING "Build tests" OFF)
-option(INSTALL_TESTING "Install test sources alongside the project" OFF)
+set(CMAKE_INSTALL_RPATH "${CMAKE_CURRENT_SOURCE_DIR}/third_party/lib")
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+link_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/lib)
+include_directories(BEFORE SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/include)
 
+# ---- Options ---- #
+set(USE_CASADI ON CACHE BOOL "Use CasADi for optimization")
+option(BUILD_TESTING "Build tests" ON)
+cmake_dependent_option(
+    INSTALL_TESTING "Install test sources alongside the project" ON
+    "BUILD_TESTING" OFF
+)
 
 # ---- Dependencies ---- #
 

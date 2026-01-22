@@ -7,14 +7,23 @@
 // G1_29_ArmIK Implementation
 // ============================================================================
 
-G1_29_ArmIK::G1_29_ArmIK(bool unit_test, bool visualization)
+G1_29_ArmIK::G1_29_ArmIK(bool unit_test, bool visualization, 
+                         const RobotConfig* robot_config)
     : unit_test_(unit_test), 
       visualization_(visualization) {
     
+    if (robot_config == nullptr) {
+        robot_config = new RobotConfig{
+            "../assets/g1/g1_29dof_with_hand_rev_1_0.urdf",
+            "../assets/g1/"
+        };
+    }
+
+    urdf_path_ = robot_config->asset_file;
+    model_dir_ = robot_config->asset_root;
+
     std::cout << std::fixed << std::setprecision(5);
-    
-    urdf_path_ = "../assets/g1/g1_29dof_with_hand_rev_1_0.urdf";
-    
+        
     // Initialize joints to lock
     initialize_joints_to_lock();
     

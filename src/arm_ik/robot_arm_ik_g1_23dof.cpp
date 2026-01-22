@@ -7,20 +7,14 @@
 G1_29_ArmIK_NoWrists::G1_29_ArmIK_NoWrists(bool unit_test, 
                                            bool visualization,
                                            const RobotConfig* robot_config)
-    : G1_29_ArmIK(unit_test, visualization),
+    : G1_29_ArmIK(unit_test, visualization, robot_config),
       speed_factor_(0.02) {
+
+    pinocchio::GeometryModel full_geom_model;
     
-    std::cout << std::fixed << std::setprecision(5);
-    
-    // Override URDF paths if robot_config is provided
-    if (robot_config != nullptr) {
-        urdf_path_ = robot_config->asset_file;
-        model_dir_ = robot_config->asset_root;
-        
-        // Rebuild robot model with new paths
-        pinocchio::urdf::buildModel(urdf_path_, robot_model_);
-        robot_data_ = pinocchio::Data(robot_model_);
-    }
+    // Build geometry model for collision detection
+    pinocchio::urdf::buildGeom(robot_model_, urdf_path_, 
+                               pinocchio::COLLISION, full_geom_model, model_dir_);
     
     // Add wrist joints to the lock list
     mixed_joints_to_lock_ids_.push_back("left_wrist_pitch_joint");
@@ -39,12 +33,16 @@ G1_29_ArmIK_NoWrists::G1_29_ArmIK_NoWrists(bool unit_test,
     }
     
     Eigen::VectorXd reference_config = Eigen::VectorXd::Zero(robot_model_.nq);
-    pinocchio::buildReducedModel(robot_model_, joints_to_lock, 
-                                 reference_config, reduced_model_);
-    reduced_data_ = pinocchio::Data(reduced_model_);
+
+    reduced_model_ = pinocchio::Model();
+    reduced_data_ = pinocchio::Data();
+    pinocchio::buildReducedModel(robot_model_, full_geom_model, joints_to_lock, 
+                                 reference_config, reduced_model_, geom_model_);
 
     // Add end-effector frames
     add_end_effector_frames();
+
+    reduced_data_ = pinocchio::Data(reduced_model_);
     
     // Initialize collision model
     initialize_collision_model();
@@ -85,18 +83,16 @@ void G1_29_ArmIK_NoWrists::add_end_effector_frames() {
 }
 
 void G1_29_ArmIK_NoWrists::initialize_collision_model() {
-    // Build geometry model for collision detection
-    pinocchio::urdf::buildGeom(reduced_model_, urdf_path_, 
-                               pinocchio::COLLISION, geom_model_, model_dir_);
     
     // Create geometry data
-    geom_data_ = pinocchio::GeometryData(geom_model_);
     
     // Add all collision pairs
     geom_model_.addAllCollisionPairs();
     
     // Filter out adjacent link collisions
     filter_adjacent_collision_pairs();
+
+    geom_data_ = pinocchio::GeometryData(geom_model_);
     
     std::cout << "num collision pairs - initial: " 
               << geom_model_.collisionPairs.size() << std::endl;
