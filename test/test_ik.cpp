@@ -1,6 +1,6 @@
 #include <arm_ik/robot_arm_ik_g1_23dof.h>
 
-
+using namespace IK;
 
 // Helper function to create SE3 transformation matrix
 Eigen::Matrix4d create_se3(const Eigen::Quaterniond& q, const Eigen::Vector3d& t) {
@@ -21,8 +21,25 @@ Eigen::Matrix4d create_se3(double qw, double qx, double qy, double qz,
 
 int main() {
     // Define target poses for left and right wrists
-    Eigen::Matrix4d left_target = create_se3(0.7071, 0, 0.7071, 0, 0.5, 0.3, 1.2);
-    Eigen::Matrix4d right_target = create_se3(0.7071, 0, -0.7071, 0, -0.5, 0.3, 1.2);
+    // read translation (tx, ty, tz) for left and right targets from stdin
+    double ltx = 0.8, lty = 0.3, ltz = 1.2;
+    double rtx = 0.5, rty = 0.5, rtz = 1.2;
+    // std::cout << "Enter left tx ty tz (or press Enter to use defaults 0.8 0.3 1.2): ";
+    // if (!(std::cin >> ltx >> lty >> ltz)) {
+    //     // no input -> keep defaults, and clear error state / remaining line
+    //     std::cin.clear();
+    //     std::string _dummy;
+    //     std::getline(std::cin, _dummy);
+    // }
+    // std::cout << "Enter right tx ty tz (or press Enter to use defaults 0.5 0.5 1.2): ";
+    // if (!(std::cin >> rtx >> rty >> rtz)) {
+    //     std::cin.clear();
+    //     std::string _dummy;
+    //     std::getline(std::cin, _dummy);
+    // }
+
+    Eigen::Matrix4d left_target = create_se3(0.7071, 0, 0.7071, 0, ltx, lty, ltz);
+    Eigen::Matrix4d right_target = create_se3(0.7071, 0, -0.7071, 0, rtx, rty, rtz);
     // Create robot configuration
     RobotConfig config;
     config.asset_file = "../assets/g1/g1_29dof_with_hand_rev_1_0.urdf";
@@ -48,7 +65,8 @@ int main() {
     );
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
-    auto [q, tau] = result;
+    auto q = Eigen::VectorXd::Map(result.position.data(), result.position.size());
+    auto tau = Eigen::VectorXd::Map(result.effort.data(), result.effort.size());
     std::cout << "IK solve time: " << elapsed.count() << " s" << std::endl;
 
     std::cout << "IK solution q: " << q.transpose() << std::endl;

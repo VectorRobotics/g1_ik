@@ -1,5 +1,6 @@
 #include <arm_ik/robot_arm_ik.h>
 
+using namespace IK;
 int main(){
 
     #ifdef USE_CASADI
@@ -25,14 +26,18 @@ int main(){
         #include <chrono>
 
         auto start = std::chrono::high_resolution_clock::now();
-        auto [q, tau] = ik_solver.solve_ik(left_target, right_target);
+        auto result = ik_solver.solve_ik(left_target, right_target);
         auto end = std::chrono::high_resolution_clock::now();
 
         auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         std::cout << "solve_ik time: " << elapsed_us << " us" << std::endl;
+    std::chrono::duration<double> elapsed = end - start;
+    auto q = Eigen::VectorXd::Map(result.position.data(), result.position.size());
+    auto tau = Eigen::VectorXd::Map(result.effort.data(), result.effort.size());
+    std::cout << "IK solve time: " << elapsed.count() << " s" << std::endl;
 
-        std::cout << "IK solution q: " << q.transpose() << std::endl;
-        std::cout << "IK solution tau: " << tau.transpose() << std::endl;
+    std::cout << "IK solution q: " << q.transpose() << std::endl;
+    std::cout << "IK solution tau: " << tau.transpose() << std::endl;
 
     } catch (const std::exception& e) {
         std::cerr << "Exception during IK solving: " << e.what() << std::endl;
