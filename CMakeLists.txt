@@ -31,23 +31,32 @@ include_directories(BEFORE SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/includ
 
 # ---- Options & Dependencies ---- #
 
-set(USE_CASADI OFF CACHE BOOL "Use CasADi for optimization")
-option(BUILD_TESTING "Build tests" ON)
-cmake_dependent_option(INSTALL_TESTING "Install test sources" ON "BUILD_TESTING" OFF)
+set(USE_CASADI ON CACHE BOOL "Use CasADi for optimization")
+option(BUILD_TESTING "Build tests" OFF)
+cmake_dependent_option(INSTALL_TESTING "Install test sources" OFF "BUILD_TESTING" ON)
+cmake_dependent_option(RUN_TESTING "Run test scripts" BUILD_TESTING "ROS2_INTEGRATION" OFF)
 
 list(INSERT CMAKE_PREFIX_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
-find_package(pinocchio REQUIRED)
 
 if(USE_CASADI)
+    add_definitions(-DPINOCCHIO_WITH_CASADI)
     find_package(casadi REQUIRED)
+    message(STATUS "CasADi found: ${casadi_DIR}")
+
 endif()
+
+find_package(urdfdom REQUIRED)
+find_package(console_bridge REQUIRED)
+find_package(pinocchio REQUIRED)
 
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third_party/eigen/eigen")
 
 # ---- Library ---- #
 
-file(GLOB_RECURSE SOURCES "src/*.cpp")
-add_library(g1_ik ${SOURCES})
+# file(GLOB_RECURSE SRC_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+file(GLOB_RECURSE ARM_IK_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/arm_ik/*.cpp")
+# set(SOURCES ${SRC_SOURCES} ${ARM_IK_SOURCES})
+add_library(g1_ik ${ARM_IK_SOURCES})
 
 target_include_directories(g1_ik PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -76,9 +85,11 @@ if(BUILD_TESTING)
         target_compile_definitions(test_robot_arm_ik PRIVATE USE_CASADI)
     endif()
 
-    include(GoogleTest)
-    gtest_discover_tests(test_ik)
-    gtest_discover_tests(test_robot_arm_ik)
+    if (RUN_TESTING)
+        include(GoogleTest)
+        gtest_discover_tests(test_ik WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test)
+        gtest_discover_tests(test_robot_arm_ik WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test)
+    endif()
 endif()
 
 # --- Installation --- #
@@ -92,17 +103,30 @@ install(TARGETS g1_ik
 )
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY assets/  DESTINATION share/${PROJECT_NAME}/assets)
 
 if(INSTALL_TESTING)
     install(FILES test/test_ik.cpp test/test_robot_arm_ik.cpp DESTINATION share/${PROJECT_NAME}/test)
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/ DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/assets)
 endif()
 
 # ---- ROS 2 Integration ---- #
 
 if(ROS2_INTEGRATION)
     find_package(ament_cmake REQUIRED)
+    find_package(ament_index_cpp REQUIRED)
+    find_package(rclcpp REQUIRED)
+    find_package(sensor_msgs REQUIRED)
 
-    install(DIRECTORY launch assets DESTINATION share/${PROJECT_NAME})
+    add_executable(ik_joint_state_publisher src/joint_state_publisher.cpp)
+    target_link_libraries(ik_joint_state_publisher g1_ik)
+    ament_target_dependencies(ik_joint_state_publisher ament_index_cpp rclcpp sensor_msgs)
+
+    install (TARGETS ik_joint_state_publisher
+        DESTINATION lib/${PROJECT_NAME}
+    )
+
+    install(DIRECTORY launch assets rviz DESTINATION share/${PROJECT_NAME})
 
     if(BUILD_TESTING)
         find_package(ament_lint_auto REQUIRED)
