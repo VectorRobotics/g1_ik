@@ -5,6 +5,7 @@
 #include <pinocchio/collision/collision.hpp>
 #include <pinocchio/parsers/urdf.hpp>
 
+namespace IK {
 /**
  * @brief G1_29_ArmIK_NoWrists - Extended IK solver without wrist joints
  * 
@@ -38,7 +39,7 @@ public:
      * @param collision_check Enable self-collision checking
      * @return Pair of (joint_positions, joint_torques)
      */
-    std::pair<Eigen::VectorXd, Eigen::VectorXd> solve_ik(
+    JointState solve_ik(
         const Eigen::Matrix4d& left_wrist,
         const Eigen::Matrix4d& right_wrist,
         const Eigen::VectorXd* current_lr_arm_motor_q = nullptr,
@@ -75,4 +76,5 @@ private:
     int nv_;
 };
 
+} // namespace IK
 #endif // ROBOT_ARM_IK_G1_23DOF_H
