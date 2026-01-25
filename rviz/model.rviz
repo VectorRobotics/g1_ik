@@ -17,8 +17,10 @@ Visualization Manager:
     - Class: rviz_default_plugins/TF
       Name: TF
       Value: true
+      Marker Scale: 
+        Value: 0.2
   Global Options:
-    Fixed Frame: base_link
+    Fixed Frame: g1_center
   Tools:
     - Class: rviz_default_plugins/MoveCamera
   Value: true
