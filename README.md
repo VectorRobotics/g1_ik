@@ -39,7 +39,7 @@ Follow these instructions.
    ```bash
    export LD_LIBRARY_PATH=$PWD/g1_ik/third_party/lib:$LD_LIBRARY_PATH
    ```
-4. Make build and install directories
+4. Build and install
    ```bash
    cd ..
    colcon build
