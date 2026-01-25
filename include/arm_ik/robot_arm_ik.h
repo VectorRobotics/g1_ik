@@ -17,6 +17,7 @@
 
 #include "weighted_moving_filter.h"
 
+namespace IK {
 /**
  * @brief Base configuration structure for robot models
  */
@@ -24,6 +25,18 @@ struct RobotConfig {
     std::string asset_file;
     std::string asset_root;
 };
+
+/**
+ * @brief Return Type for IK.
+ */
+struct JointState {
+    std::vector<std::string> name;
+    std::vector<double> position;
+    std::vector<double> velocity;
+    std::vector<double> effort;
+};
+
+
 
 /**
  * @brief G1_29_ArmIK - Inverse kinematics solver for G1 robot with 29 DOF
@@ -45,7 +58,7 @@ public:
      * @param current_lr_arm_motor_dq Current joint velocities (optional)
      * @return Pair of (joint_positions, joint_torques)
      */
-    virtual std::pair<Eigen::VectorXd, Eigen::VectorXd> solve_ik(
+    virtual JointState solve_ik(
         const Eigen::Matrix4d& left_wrist,
         const Eigen::Matrix4d& right_wrist,
         const Eigen::VectorXd* current_lr_arm_motor_q = nullptr,
@@ -74,6 +87,7 @@ protected:
 
     bool unit_test_;
     bool visualization_;
+    RobotConfig robot_config_;
     std::string urdf_path_;
     std::string model_dir_;
 
@@ -90,8 +104,6 @@ protected:
         casadi::MX param_tf_l_;
         casadi::MX param_tf_r_;
 
-        casadi::Function translational_error_;
-        casadi::Function rotational_error_;
     #else // USE_CASADI
 
         const double eps  = 1e-4;
@@ -120,4 +132,6 @@ protected:
 
     std::vector<std::string> mixed_joints_to_lock_ids_;
 };
+
+} // namespace IK
 #endif // ROBOT_ARM_IK_H

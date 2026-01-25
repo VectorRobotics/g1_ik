@@ -4,6 +4,8 @@
 #include <pinocchio/algorithm/compute-all-terms.hpp>
 #include <set>
 
+namespace IK {
+
 G1_29_ArmIK_NoWrists::G1_29_ArmIK_NoWrists(bool unit_test, 
                                            bool visualization,
                                            const RobotConfig* robot_config)
@@ -134,7 +136,7 @@ bool G1_29_ArmIK_NoWrists::check_self_collision(const Eigen::VectorXd& q) {
     return collision_detected;
 }
 
-std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK_NoWrists::solve_ik(
+JointState G1_29_ArmIK_NoWrists::solve_ik(
     const Eigen::Matrix4d& left_wrist,
     const Eigen::Matrix4d& right_wrist,
     const Eigen::VectorXd* current_lr_arm_motor_q,
@@ -225,7 +227,16 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK_NoWrists::solve_ik(
         // Check for self-collision
         if (collision_check && check_self_collision(sol_q)) {
             std::cout << "Self-collision detected. Rejecting solution." << std::endl;
-            return {init_data_, Eigen::VectorXd::Zero(nv_)};
+            JointState empty_state;
+
+            for (int joint_id = 1; joint_id <= reduced_model_.njoints; ++joint_id) {
+                empty_state.name.push_back(reduced_model_.names[joint_id]);
+                empty_state.position.push_back(init_data_[reduced_model_.idx_qs[joint_id]]);
+                empty_state.velocity.push_back(0.0);
+                empty_state.effort.push_back(0.0);
+            }
+            
+            return empty_state;
         }
         
         // Compute velocity
@@ -269,8 +280,17 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK_NoWrists::solve_ik(
             
             sol_tauff += tau_ext;
         }
+
+        JointState result;
+
+        for (int joint_id = 1; joint_id <= reduced_model_.njoints; ++joint_id) {
+            result.name.push_back(reduced_model_.names[joint_id]);
+            result.position.push_back(sol_q[reduced_model_.idx_qs[joint_id]]);
+            result.velocity.push_back(v[reduced_model_.idx_vs[joint_id]]);
+            result.effort.push_back(sol_tauff[reduced_model_.idx_vs[joint_id]]);
+        }
         
-        return {sol_q, sol_tauff};
+        return result;
         
     } catch (const std::exception& e) {
         std::cerr << "ERROR in convergence: " << e.what() << std::endl;
@@ -318,14 +338,18 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK_NoWrists::solve_ik(
         std::cerr << "left_pose:\n" << left_wrist << std::endl;
         std::cerr << "right_pose:\n" << right_wrist << std::endl;
         
-        // Return current motor state or zeros
-        if (current_lr_arm_motor_q != nullptr) {
-            int offset = current_lr_arm_motor_q->size() - nq_;
-            return {current_lr_arm_motor_q->segment(offset, nq_), 
-                    Eigen::VectorXd::Zero(nv_)};
-        } else {
-            return {Eigen::VectorXd::Zero(nq_), Eigen::VectorXd::Zero(nv_)};
+        JointState result;
+
+        for (int joint_id = 1; joint_id <= reduced_model_.njoints; ++joint_id) {
+            result.name.push_back(reduced_model_.names[joint_id]);
+            result.position.push_back(sol_q[reduced_model_.idx_qs[joint_id]]);
+            result.velocity.push_back(v[reduced_model_.idx_vs[joint_id]]);
+            result.effort.push_back(sol_tauff[reduced_model_.idx_vs[joint_id]]);
         }
+        
+        return result;
     }
     
 }
+
+} // namespace IK

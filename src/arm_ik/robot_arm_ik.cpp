@@ -1,3 +1,8 @@
+#ifndef PINOCCHIO_WITH_CASADI
+    #define PINOCCHIO_WITH_CASADI
+#endif
+
+#include <pinocchio/autodiff/casadi.hpp>
 #include "arm_ik/robot_arm_ik.h"
 
 #include <stdexcept>
@@ -7,28 +12,32 @@
 // G1_29_ArmIK Implementation
 // ============================================================================
 
+namespace IK {
 G1_29_ArmIK::G1_29_ArmIK(bool unit_test, bool visualization, 
                          const RobotConfig* robot_config)
     : unit_test_(unit_test), 
-      visualization_(visualization) {
+      visualization_(visualization) 
+      {
     
     if (robot_config == nullptr) {
-        robot_config = new RobotConfig{
+        robot_config_ = {
             "../assets/g1/g1_29dof_with_hand_rev_1_0.urdf",
             "../assets/g1/"
         };
+    } else {
+        robot_config_ = *robot_config;
     }
 
-    urdf_path_ = robot_config->asset_file;
-    model_dir_ = robot_config->asset_root;
-
+    urdf_path_ = robot_config_.asset_file;
+    model_dir_ = robot_config_.asset_root;
+    
     std::cout << std::fixed << std::setprecision(5);
         
     // Initialize joints to lock
     initialize_joints_to_lock();
     
-    std::cout << "[G1_29_ArmIK] >>> Loading URDF (slow)..." << std::endl;
-    
+    std::cout << "[G1_29_ArmIK] >>> Loading URDF from " << urdf_path_ << std::endl;
+
     // Build robot model from URDF
     pinocchio::urdf::buildModel(urdf_path_, robot_model_);
     robot_data_ = pinocchio::Data(robot_model_);
@@ -126,14 +135,84 @@ void G1_29_ArmIK::setup_optimization() {
     param_tf_l_ = opti_.parameter(4, 4);
     param_tf_r_ = opti_.parameter(4, 4);
     
-    // Note: Full CasADi-Pinocchio integration requires more complex setup
-    // This includes creating symbolic functions for forward kinematics
-    // and defining error functions. This is simplified here.
-    
     // Set joint limits as constraints
     casadi::DM lower_limits = eigen_to_casadi(reduced_model_.lowerPositionLimit);
     casadi::DM upper_limits = eigen_to_casadi(reduced_model_.upperPositionLimit);
     opti_.subject_to(opti_.bounded(lower_limits, var_q_, upper_limits));
+
+    pinocchio::ModelTpl<casadi::SX> cmodel(reduced_model_.cast<casadi::SX>());
+    pinocchio::DataTpl<casadi::SX> cdata(cmodel);
+
+    auto L_hand_id = cmodel.getFrameId("L_ee");
+    auto R_hand_id = cmodel.getFrameId("R_ee");
+
+    casadi::SX cq = casadi::SX::sym("q", cmodel.nq);
+    casadi::SX cTf_l = casadi::SX::sym("tf_l", 4, 4);
+    casadi::SX cTf_r = casadi::SX::sym("tf_r", 4, 4);
+
+    Eigen::Matrix<casadi::SX, Eigen::Dynamic, 1> cq_eigen(cmodel.nq);
+    for (int i = 0; i < cmodel.nq; ++i) {
+        cq_eigen(i) = cq(i);
+    }
+
+    pinocchio::framesForwardKinematics(cmodel, cdata, cq_eigen);
+    pinocchio::SE3Tpl<casadi::SX> T_L_se3 = cdata.oMf[L_hand_id];
+    pinocchio::SE3Tpl<casadi::SX> T_R_se3 = cdata.oMf[R_hand_id];
+
+    casadi::SX rot_L(casadi::Sparsity::dense(3,3));
+    casadi::SX rot_R(casadi::Sparsity::dense(3,3));
+    casadi::SX trans_L(casadi::Sparsity::dense(3,1));
+    casadi::SX trans_R(casadi::Sparsity::dense(3,1));
+    casadi::SX target_rot_L(casadi::Sparsity::dense(3,3));
+    casadi::SX target_rot_R(casadi::Sparsity::dense(3,3));
+    casadi::SX target_trans_L(casadi::Sparsity::dense(3,1));
+    casadi::SX target_trans_R(casadi::Sparsity::dense(3,1));
+    Eigen::Matrix<casadi::SX, 3, 3> rot_err_mat_L;
+    Eigen::Matrix<casadi::SX, 3, 3> rot_err_mat_R;
+    casadi::SX rot_err_L(casadi::Sparsity::dense(3,1));
+    casadi::SX rot_err_R(casadi::Sparsity::dense(3,1));
+    casadi::SX trans_err_L(casadi::Sparsity::dense(3,1));
+    casadi::SX trans_err_R(casadi::Sparsity::dense(3,1));
+
+    pinocchio::casadi::copy(T_L_se3.rotation(), rot_L);
+    pinocchio::casadi::copy(T_R_se3.rotation(), rot_R);
+    pinocchio::casadi::copy(T_L_se3.translation(), trans_L);
+    pinocchio::casadi::copy(T_R_se3.translation(), trans_R);
+
+    target_rot_L = cTf_l(casadi::Slice(0,3), casadi::Slice(0,3));;
+    target_rot_R = cTf_r(casadi::Slice(0,3), casadi::Slice(0,3));;
+    target_trans_L = cTf_l(casadi::Slice(0,3), 3);
+    target_trans_R = cTf_r(casadi::Slice(0,3), 3);
+
+    pinocchio::casadi::copy(casadi::SX::mtimes(rot_L, target_rot_L.T()), rot_err_mat_L);
+    pinocchio::casadi::copy(casadi::SX::mtimes(rot_R, target_rot_R.T()), rot_err_mat_R);
+
+    pinocchio::casadi::copy(pinocchio::log3(rot_err_mat_L), rot_err_L);
+    pinocchio::casadi::copy(pinocchio::log3(rot_err_mat_R), rot_err_R);
+    trans_err_L = trans_L - target_trans_L;
+    trans_err_R = trans_R - target_trans_R;
+
+    // Translation Error
+    casadi::SX trans_err = casadi::SX::vertcat({
+        trans_err_L,
+        trans_err_R
+    });
+    casadi::Function translational_error = casadi::Function("trans_err", {cq, cTf_l, cTf_r}, {trans_err});
+
+    // Rotational Error (using log3 for SO3 distance)
+    casadi::SX rot_err = casadi::SX::vertcat({
+        rot_err_L,
+        rot_err_R
+    });
+    casadi::Function rotational_error = casadi::Function("rot_err", {cq, cTf_l, cTf_r}, {rot_err});
+
+    // Costs
+    casadi::MX cost_trans = casadi::MX::sumsqr(translational_error({var_q_, param_tf_l_, param_tf_r_})[0]);
+    casadi::MX cost_rot = casadi::MX::sumsqr(rotational_error({var_q_, param_tf_l_, param_tf_r_})[0]);
+    casadi::MX cost_reg = casadi::MX::sumsqr(var_q_);
+    casadi::MX cost_smooth = casadi::MX::sumsqr(var_q_ - var_q_last_);
+
+    opti_.minimize(50.0 * cost_trans + cost_rot + 0.02 * cost_reg + 0.1 * cost_smooth);
     
     // Set optimization options
     casadi::Dict opts;
@@ -143,8 +222,8 @@ void G1_29_ArmIK::setup_optimization() {
     opts["print_time"] = false;
     opts["ipopt.sb"] = "yes";
     opts["ipopt.print_level"] = 0;
-    opts["ipopt.max_iter"] = 30;
-    opts["ipopt.tol"] = 1e-4;
+    opts["ipopt.max_iter"] = 50;
+    opts["ipopt.tol"] = 1e-6;
     opts["ipopt.acceptable_tol"] = 5e-4;
     opts["ipopt.acceptable_iter"] = 5;
     opts["ipopt.warm_start_init_point"] = "yes";
@@ -171,11 +250,20 @@ std::pair<Eigen::Matrix4d, Eigen::Matrix4d> G1_29_ArmIK::scale_arms(
     return {robot_left_pose, robot_right_pose};
 }
 
-std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK::solve_ik(
+JointState G1_29_ArmIK::solve_ik(
     const Eigen::Matrix4d& left_wrist,
     const Eigen::Matrix4d& right_wrist,
     const Eigen::VectorXd* current_lr_arm_motor_q,
     const Eigen::VectorXd* current_lr_arm_motor_dq) {
+
+    
+    for (int j = 0; j < reduced_model_.njoints; ++j) {
+        std::cout << "[G1_29_ArmIK] >>> Joint " << j << ": " 
+                  << reduced_model_.names[j] << ": " 
+                  << reduced_model_.joints[j].shortname() << std::endl;
+    }
+
+    std::cout << "[G1_29_ArmIK] >>> Model has nq=" << reduced_model_.nq << "and nv=" << reduced_model_.nv << std::endl;
     
     // Update initial guess
     if (current_lr_arm_motor_q != nullptr) {
@@ -223,6 +311,12 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK::solve_ik(
             
             // Extract solution
             std::vector<double> sol_q_vec = static_cast<std::vector<double>>(sol.value(var_q_));
+
+            std::cout << "[G1_29_ArmIK] >>> IK Solution Found: ";
+            for (auto a: sol_q_vec) {
+                std::cout << a << ", ";
+            }
+            std::cout << std::endl;
         #else // USE_CASADI
             // Using interation method
             for (int i=0;;i++)
@@ -277,8 +371,18 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK::solve_ik(
             reduced_model_, reduced_data_, sol_q, v,
             Eigen::VectorXd::Zero(reduced_model_.nv)
         );
+
+        JointState result;
+
+        std::cout << "IK Solved for: ";
+        for (int joint_id = 1; joint_id <= reduced_model_.nv; ++joint_id) {
+            result.name.push_back(reduced_model_.names[joint_id]);
+            result.position.push_back(sol_q[reduced_model_.idx_qs[joint_id]]);
+            result.velocity.push_back(v[reduced_model_.idx_vs[joint_id]]);
+            result.effort.push_back(sol_tauff[reduced_model_.idx_vs[joint_id]]);
+        }
         
-        return {sol_q, sol_tauff};
+        return result;
         
     } catch (const std::exception& e) {
         std::cerr << "ERROR in convergence: " << e.what() << std::endl;
@@ -315,12 +419,17 @@ std::pair<Eigen::VectorXd, Eigen::VectorXd> G1_29_ArmIK::solve_ik(
         std::cerr << "sol_q: " << sol_q.transpose() << std::endl;
         std::cerr << "left_pose:\n" << left_wrist << std::endl;
         std::cerr << "right_pose:\n" << right_wrist << std::endl;
-        
-        // Return current motor state or zeros
-        if (current_lr_arm_motor_q != nullptr) {
-            return {*current_lr_arm_motor_q, Eigen::VectorXd::Zero(reduced_model_.nv)};
-        } else {
-            return {sol_q, sol_tauff};
+
+        JointState result;
+
+        for (int joint_id = 0; joint_id < reduced_model_.njoints; ++joint_id) {
+            result.name.push_back(reduced_model_.names[joint_id]);
+            result.position.push_back(sol_q[reduced_model_.idx_qs[joint_id]]);
+            result.velocity.push_back(v[reduced_model_.idx_vs[joint_id]]);
+            result.effort.push_back(sol_tauff[reduced_model_.idx_vs[joint_id]]);
         }
+        return result;
     }
 }
+
+} // namespace IK
