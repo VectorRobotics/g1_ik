@@ -1,8 +1,31 @@
+# Installation
+## Building from C++ library from source
+Follow these instructions.
+1. Clone the source code
+
+   ```bash
+   git clone https://github.com/VectorRobotics/g1_ik.git
+   ```
+2. Link third_party libraries to dynamic linker
+   ```bash
+   export LD_LIBRARY_PATH=$PWD/g1_ik/third_party/lib:$LD_LIBRARY_PATH
+   ```
+3. Make build and install directories
+   ```bash
+   cd g1_ik && mkdir build install && cd build
+   ```
+4. Configure, make and install
+   ```bash
+   cmake ..
+   make -j4
+   make install
+   ```
+
 # How to use
 
 To use IK, do the following in the package
 ```cpp
-#include "robot_arm_ik_g1_23dof.h"
+#include <arm_ik/robot_arm_ik_g1_23dof.h>
 
 // Create robot configuration
 RobotConfig config;
@@ -18,33 +41,21 @@ Eigen::VectorXd ext_force_right = Eigen::VectorXd::Zero(6);
 ext_force_left(2) = 5.0;  // 5N downward force
 
 // Solve IK with collision checking
-auto [q, tau] = arm_ik.solve_ik(
+auto result = arm_ik.solve_ik(
     left_target, right_target,
     nullptr, nullptr,  // current q, dq
     &ext_force_left, &ext_force_right,
     true  // enable collision checking
 );
+
+// std::vector<string or double>
+result.name
+reuslt.position
+result.velocity // Not implemented
+result.effort
 ```
 
-### Required Libraries
-
-1. **Eigen3** (≥ 3.3) (Already installed with ROS2)
-   ```bash
-   sudo apt-get install libeigen3-dev
-   ```
-
-2. **Pinocchio** (≥ 2.6)
-   ```bash
-   sudo apt install ros-$ROS_DISTRO-pinocchio
-   ```
-
-3. **CasADi** (≥ 3.5)
-   ```bash
-   # Download from https://web.casadi.org/get/
-   # Or install via package manager if available
-   ```
-
-## Some helper functions
+### Some helper functions
 ```cpp
 // Helper function to create SE3 transformation matrix
 Eigen::Matrix4d create_se3(const Eigen::Quaterniond& q, const Eigen::Vector3d& t) {
@@ -61,6 +72,4 @@ Eigen::Matrix4d create_se3(double qw, double qx, double qy, double qz,
     Eigen::Vector3d t(tx, ty, tz);
     return create_se3(q, t);
 }
-
-
 ```
