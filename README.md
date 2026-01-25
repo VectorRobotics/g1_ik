@@ -49,7 +49,7 @@ Follow these instructions.
    source install/setup.bash
    ```
 
-## Building from C++ library from source
+## Building C++ library from source
 Follow these instructions.
 1. Clone the source code
 
