@@ -56,18 +56,18 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/third_party/eigen/eigen")
 # file(GLOB_RECURSE SRC_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 file(GLOB_RECURSE ARM_IK_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/arm_ik/*.cpp")
 # set(SOURCES ${SRC_SOURCES} ${ARM_IK_SOURCES})
-add_library(g1_ik ${ARM_IK_SOURCES})
+add_library(arm_ik ${ARM_IK_SOURCES})
 
-target_include_directories(g1_ik PUBLIC 
+target_include_directories(arm_ik PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(g1_ik PUBLIC Eigen3::Eigen pinocchio::pinocchio)
+target_link_libraries(arm_ik PUBLIC Eigen3::Eigen pinocchio::pinocchio)
 
 if(USE_CASADI)
-    target_link_libraries(g1_ik PUBLIC casadi)
-    target_compile_definitions(g1_ik PRIVATE USE_CASADI)
+    target_link_libraries(arm_ik PUBLIC casadi)
+    target_compile_definitions(arm_ik PRIVATE USE_CASADI)
 endif()
 
 # ---- Testing ---- #
@@ -77,8 +77,8 @@ if(BUILD_TESTING)
     
     add_executable(test_ik test/test_ik.cpp)
     add_executable(test_robot_arm_ik test/test_robot_arm_ik.cpp)
-    target_link_libraries(test_ik PRIVATE g1_ik GTest::gtest_main)
-    target_link_libraries(test_robot_arm_ik PRIVATE g1_ik GTest::gtest_main)
+    target_link_libraries(test_ik PRIVATE arm_ik GTest::gtest_main)
+    target_link_libraries(test_robot_arm_ik PRIVATE arm_ik GTest::gtest_main)
 
     if(USE_CASADI)
         target_compile_definitions(test_ik PRIVATE USE_CASADI)
@@ -96,7 +96,7 @@ endif()
 
 include(GNUInstallDirs)
 
-install(TARGETS g1_ik
+install(TARGETS arm_ik
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
@@ -119,7 +119,7 @@ if(ROS2_INTEGRATION)
     find_package(sensor_msgs REQUIRED)
 
     add_executable(ik_joint_state_publisher src/joint_state_publisher.cpp)
-    target_link_libraries(ik_joint_state_publisher g1_ik)
+    target_link_libraries(ik_joint_state_publisher arm_ik)
     ament_target_dependencies(ik_joint_state_publisher ament_index_cpp rclcpp sensor_msgs)
 
     install (TARGETS ik_joint_state_publisher

@@ -4,7 +4,7 @@
 `g1_ik` is a ROS2 package and also contains a C++ library for inverse kinematics and collision detection for the Unitree G1 HUmanoid robot.
 
 ## Key features
-1. `g1_ik` C++ Library
+1. `arm_ik` C++ Library
    - Solving for inverse kinematics of the arms of the G1 give SE(3) or 6D pose for the end-effector.
    - Accounting for previous state for closest solution, naturalizing motion
    - Modelled as an optimization problem allowing tuning of weights of different costs (translation, rotation, regularization, and smothening) to achieve desired result.
@@ -14,7 +14,7 @@
    - Easy to freeze joints to simplify the IK problem as well as allow complex robot usage.
    - Full C++ implementation with simple API. 
 2. `ik_joint_state_publisher`  ROS2 executable
-   - Publishing joint states as received from the `g1_ik` library to the topic `ik/joint_states`
+   - Publishing joint states as received from the `arm_ik` library to the topic `ik/joint_states`
 3. `display.launch.py` ROS2 launch file
    - Visualize the G1 robot in Rviz with TF tree
    - Launched joint_state_publisher, robot_state_publisher and rviz
@@ -120,7 +120,7 @@ result.velocity // Not implemented
 result.effort
 ```
 
-## Some helper functions
+### Some helper functions
 ```cpp
 // Helper function to create SE3 transformation matrix
 Eigen::Matrix4d create_se3(const Eigen::Quaterniond& q, const Eigen::Vector3d& t) {
