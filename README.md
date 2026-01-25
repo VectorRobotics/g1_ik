@@ -1,4 +1,6 @@
 # G1_IK
+  ![Alt text](docs/ik.gif)
+
 `g1_ik` is a ROS2 package and also contains a C++ library for inverse kinematics and collision detection for the Unitree G1 HUmanoid robot.
 
 ## Key features
